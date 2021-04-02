@@ -4,25 +4,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "Kroger-Swift-Poet",
+    name: "KrogerSwiftPoet",
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
         .library(
-            name: "Kroger-Swift-Poet",
-            targets: ["Kroger-Swift-Poet"]),
+            name: "KrogerSwiftPoet",
+            targets: ["KrogerSwiftPoet"]),
     ],
     dependencies: [
-        // Dependencies declare other packages that this package depends on.
-        // .package(url: /* package url */, from: "1.0.0"),
     ],
     targets: [
-        // Targets are the basic building blocks of a package. A target can define a module or a test suite.
-        // Targets can depend on other targets in this package, and on products in packages this package depends on.
         .target(
-            name: "Kroger-Swift-Poet",
+            name: "KrogerSwiftPoet",
             dependencies: []),
         .testTarget(
-            name: "Kroger-Swift-PoetTests",
-            dependencies: ["Kroger-Swift-Poet"]),
+            name: "KrogerSwiftPoetTests",
+            dependencies: ["KrogerSwiftPoet"],
+            resources: [.process("test_resources")]),
     ]
 )

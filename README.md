@@ -1,3 +1,3 @@
-# Kroger-Swift-Poet
+# KrogerSwiftPoet
 
-A description of this package.
+Swift Package version of https://github.com/jupitervn/SwiftPoet
