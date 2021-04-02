@@ -1,3 +1,3 @@
-struct Kroger_Swift_Poet {
+struct KrogerSwiftPoet {
     var text = "Hello, World!"
 }

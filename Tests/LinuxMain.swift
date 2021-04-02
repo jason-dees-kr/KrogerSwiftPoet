@@ -1,7 +1,7 @@
 import XCTest
 
-import Kroger_Swift_PoetTests
+import KrogerSwiftPoetTests
 
 var tests = [XCTestCaseEntry]()
-tests += Kroger_Swift_PoetTests.allTests()
+tests += KrogerSwiftPoetTests.allTests()
 XCTMain(tests)

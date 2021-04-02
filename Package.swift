@@ -10,8 +10,13 @@ let package = Package(
         .library(
             name: "KrogerSwiftPoet",
             targets: ["KrogerSwiftPoet"]),
+        .library(
+            name: "SchemasParser",
+            targets: ["SchemasParser"]),
     ],
     dependencies: [
+        //.package(name: "JSONSchema", url: "https://github.com/kylef/JSONSchema.swift", .branch("master")),
+        //.package(name: "JSONSchema", url: "https://github.com/kylef/JSONSchema.swift", .exact("0.5.0")),
     ],
     targets: [
         .target(
@@ -21,5 +26,8 @@ let package = Package(
             name: "KrogerSwiftPoetTests",
             dependencies: ["KrogerSwiftPoet"],
             resources: [.process("test_resources")]),
+        .target(
+            name: "SchemasParser",
+            dependencies: ["KrogerSwiftPoet"]),
     ]
 )

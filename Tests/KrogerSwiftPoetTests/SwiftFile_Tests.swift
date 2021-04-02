@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import Kroger_Swift_Poet
+@testable import KrogerSwiftPoet
 
 class SwiftFile_Tests: XCTestCase {
     let testOutputDir = "test_results/"

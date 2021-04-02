@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import Kroger_Swift_Poet
+@testable import KrogerSwiftPoet
 
 class MethodSpec_Tests: XCTestCase {
   let outputStream = StringOutputStream()

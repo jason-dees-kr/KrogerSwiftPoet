@@ -8,7 +8,7 @@
 
 import Foundation
 
-@testable import Kroger_Swift_Poet
+@testable import KrogerSwiftPoet
 class StreamReader  {
     
     let encoding : UInt
