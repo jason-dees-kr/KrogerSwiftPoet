@@ -33,8 +33,8 @@ public struct DefinitionsBuilder {
     func buildDefinition(name: String, cast: [String : Any]) -> Definition {
         let propDict = cast["properties"] as! [String : Any]
         let required = cast["required"] as? [String]
-        //get allOf, recursively pull out $ref, if exists, add to current properties
         let allOf = cast["allOf"] as? [Any]
+        
         let properties : [Definition.Property] = propDict.map { (key, value) in .init(key: key, value: value as! [String : Any], required: required?.contains(key) ?? false)}
         
         let definition = Definition(name: .Object(name),
@@ -51,7 +51,13 @@ public struct DefinitionsBuilder {
             guard let cast = value as? [String : Any] else { return nil }
             return (key, buildDefinition(name: key, cast: cast))
         })
-        //This entirely sucks
+        // This entirely sucks
+        // Wait until All the definitions are hydrated, go through each definition
+        // to see if it has any inherited properties.
+        // addInheritedObjects function recursively goes through each object,
+        // grabbing the inherited refs and building out an heritance list. This
+        // then constructs a new Defintion object based on the current defintion
+        // and inherited defition
         return Dictionary(uniqueKeysWithValues: defintionsDictionary.map { (key, value) in
             if value.hasAllOfRef {
                 return (key, value.addInheritedObjects(definitions: defintionsDictionary))
@@ -119,6 +125,7 @@ public struct Definition {
     }
 }
 
+// MARK: `Inheritance` Construction
 extension Definition {
     var refs: [String] {
         guard let allOf = self.allOf else { return [] }
@@ -134,6 +141,7 @@ extension Definition {
     
     func getRefs(definitions: [String: Definition]) -> [Definition] {
         var refDefinitions: [Definition] = []
+        //Recursively cycle through each inherited object to build out inheritance object list
         refs.compactMap { definitions[$0] }.forEach { def in
             refDefinitions.append(def)
             refDefinitions.append(contentsOf: def.getRefs(definitions: definitions))
@@ -151,7 +159,10 @@ extension Definition {
                           allOf: allOf ?? [] + inheritedAllOf,
                           description: description)
     }
-    
+}
+
+// MARK: TypeSpec Building
+extension Definition {
     func buildEnum(_ name: DefinitionType, values: [String]) throws -> TypeSpecBuilder{
         let enumType = TypeSpec.newEnum(name: name.typeAsString)
             .superClass(superClass: "String", "Encodable", "Equatable")
