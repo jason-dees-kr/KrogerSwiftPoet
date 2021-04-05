@@ -20,23 +20,190 @@ public final class SchemaParser {
         let settings = SchemaSettings()
         
         let definitionBuilder = DefinitionsBuilder()
-        let swiftFileBuilders = try definitionBuilder.buildDefinitions(definitions: try ManifestReader(settings: settings).schemaDefinitions)
-        swiftFileBuilders.forEach {file in
-            _ = file.build().writeTo(settings.outputDirectory)
+        let definitions = try definitionBuilder.buildDefinitionsDictionary(definitions: try ManifestReader(settings: settings).schemaDefinitions)
+        
+        try definitions.forEach {name, definition in
+            _ = try definition.toSwiftFileBuilder().build().writeTo(settings.outputDirectory)
         }
     }
 }
 
 public struct DefinitionsBuilder {
-    func buildDefinitions(definitions: [String: Any]) throws -> [SwiftFileBuilder]{
-        return try definitions.compactMap {(name, def) in
-            guard def is [String: Any] else { return nil }
-            let cast = def as! [String: Any]
-            let propDict = cast["properties"] as! [String:Any]
-            let properties:[Definition.Property] = propDict.map { (key, value) in .init(key: key, value: value as! [String : Any])}
-            let definition = Definition(name: .Object(name), properties: properties, required: cast["required"] as? [String], description: cast["description"] as? String)
-            return try definition.build()
+    
+    func buildDefinition(name: String, cast: [String : Any]) -> Definition {
+        let propDict = cast["properties"] as! [String : Any]
+        let required = cast["required"] as? [String]
+        //get allOf, recursively pull out $ref, if exists, add to current properties
+        let allOf = cast["allOf"] as? [Any]
+        let properties : [Definition.Property] = propDict.map { (key, value) in .init(key: key, value: value as! [String : Any], required: required?.contains(key) ?? false)}
+        
+        let definition = Definition(name: .Object(name),
+                                    properties: properties,
+                                    required: required,
+                                    allOf: allOf,
+                                    description: cast["description"] as? String)
+        
+        return definition
+    }
+    
+    func buildDefinitionsDictionary(definitions: [String: Any]) throws -> [String: Definition] {
+        let defintionsDictionary : [String: Definition] =  Dictionary(uniqueKeysWithValues: definitions.compactMap { key, value in
+            guard let cast = value as? [String : Any] else { return nil }
+            return (key, buildDefinition(name: key, cast: cast))
+        })
+        //This entirely sucks
+        return Dictionary(uniqueKeysWithValues: defintionsDictionary.map { (key, value) in
+            if value.hasAllOfRef {
+                return (key, value.addInheritedObjects(definitions: defintionsDictionary))
+            }
+            return (key, value)
+        })
+    }
+    
+    func buildDefinitions(definitions: [String: Any]) throws -> [Definition]{
+        return definitions.compactMap {(name, def) in
+            guard let cast = def as? [String : Any] else { return nil }
+            return buildDefinition(name: name, cast: cast)
         }
+    }
+}
+
+public struct Definition {
+    let name: DefinitionType
+    var properties: [Property]
+    let required: [String]?
+    let allOf: [Any]?
+    let description: String?
+    
+    public struct Property {
+        let name: String
+        let description: String?
+        let type: DefinitionType
+        let enumValues: [String]?
+        let const: String?
+        let required: Bool
+        
+        //        let pattern: String? = nil
+        //        let minItems: Int? = nil
+        //        let maxItems: Int? = nil
+        
+        init(key: String, value:[String: Any], required: Bool) {
+            name = key
+            if let ref = value["$ref"] as? String {
+                type = DefinitionType.toDefinitionType(type: String(ref.refStringToTypeString()))
+            }
+            else if let _ = value["enum"] as? [String] {
+                type = DefinitionType.toDefinitionType(type: name)
+            }
+            else if let typeValue = value["type"] as? String {
+                if typeValue == "array", let items = value["items"] as? [String: Any] {
+                    if let ref = items["$ref"] as? String {
+                        type = .Array(DefinitionType.toDefinitionType(type: String(ref.refStringToTypeString())))
+                    }
+                    else{
+                        type = .Array(DefinitionType.toDefinitionType(type: typeValue))
+                    }
+                }
+                else {
+                    type = DefinitionType.toDefinitionType(type: typeValue)
+                }
+            }
+            else {
+                type = .String
+            }
+            description = value["description"] as? String
+            enumValues = value["enum"] as? [String]
+            const = value["const"] as? String
+            self.required = required
+        }
+    }
+}
+
+extension Definition {
+    var refs: [String] {
+        guard let allOf = self.allOf else { return [] }
+        return  allOf.compactMap { entry in
+            guard let entry = entry as? [String: String], let refValue = entry["$ref"] else { return nil }
+            return refValue.refStringToTypeString()
+        }
+    }
+    
+    var hasAllOfRef: Bool {
+        return !refs.isEmpty;
+    }
+    
+    func getRefs(definitions: [String: Definition]) -> [Definition] {
+        var refDefinitions: [Definition] = []
+        refs.compactMap { definitions[$0] }.forEach { def in
+            refDefinitions.append(def)
+            refDefinitions.append(contentsOf: def.getRefs(definitions: definitions))
+        }
+        return refDefinitions
+    }
+    
+    func addInheritedObjects(definitions: [String: Definition]) -> Definition {
+        let inheritedObjects = getRefs(definitions: definitions)
+        let inheritedProperties = inheritedObjects.flatMap { $0.properties }
+        let inheritedAllOf = inheritedObjects.compactMap { $0.allOf }
+        return Definition(name: name,
+                          properties: inheritedProperties + properties,
+                          required: required,
+                          allOf: allOf ?? [] + inheritedAllOf,
+                          description: description)
+    }
+    
+    func buildEnum(_ name: DefinitionType, values: [String]) throws -> TypeSpecBuilder{
+        let enumType = TypeSpec.newEnum(name: name.typeAsString)
+            .superClass(superClass: "String", "Encodable", "Equatable")
+            .modifier(modifiers: .PUBLIC)
+        values.forEach { value in
+            let enumConstantSpec = EnumConstantSpec.newEnumValue(name: value.toVariableCamelCase()).value(value: "\"\(value)\"")
+            _ = enumType.addEnumConstant(enumConstant: enumConstantSpec.build())
+            
+        }
+        return enumType
+    }
+    
+    func toSwiftFileBuilder() throws -> SwiftFileBuilder {
+        let structSpecBuilder = TypeSpec.newStruct(name: name.typeAsString)
+            .superClass(superClass: "Validatable")
+        let initSpec = MethodSpec.initBuilder()
+            .modifiers(.PUBLIC)
+        
+        try properties.sorted { (f, s) in f.required }.forEach { p in
+            let type: String = p.type.typeAsString
+            
+            let field = FieldSpecBuilder(name: p.name, fieldType: "\(type)\(p.required ? "": "?")")
+                .addModifier(fieldModifiers: .PUBLIC)
+            if let enums = p.enumValues {
+                _ = try structSpecBuilder.addInnerType(typeSpec: buildEnum(p.type, values: enums).build())
+            }
+            if let const = p.const {
+                switch p.type {
+                case .Int, .Double:
+                    _ = field.initWith(initializer: const)
+                default:
+                    _ = field.initWith(initializer: "\"\(const)\"")
+                }
+            }
+            else {
+                if p.required {
+                    _ = initSpec.addParam(ParameterSpec.init(p.name, paramType: "\(type)"))
+                }
+                else {
+                    _ = initSpec.addParam(ParameterSpec.init(p.name, paramType: "\(type)?", defaultValue: "nil"))
+                }
+            }
+            _ = structSpecBuilder.addProperty(propertySpec: field.build())
+        }
+        
+        let structSpec = try structSpecBuilder.addMethod(methodSpec: initSpec.build())
+            .modifier(modifiers: .PUBLIC)
+            .build()
+        
+        return SwiftFile
+            .newFile(name: name.typeAsString)
+            .addType(structSpec)
     }
 }
 
@@ -81,57 +248,6 @@ public indirect enum DefinitionType {
     }
 }
 
-public struct Definition {
-    let name: DefinitionType
-    let properties: [Property]
-    let required: [String]?
-    let description: String?
-    
-    public struct Property {
-        let name: String
-        let description: String?
-        let type: DefinitionType
-        let enumValues: [String]?
-        let const: String?
-        
-        //        let pattern: String? = nil
-        //        let minItems: Int? = nil
-        //        let maxItems: Int? = nil
-        
-        init(key: String, value:[String: Any]) {
-            name = key
-            if let ref = value["$ref"] as? String {
-                let fileSplit = ref.split(separator: "/")
-                let defName = fileSplit[fileSplit.count - 2]
-                type = DefinitionType.toDefinitionType(type: String(defName))
-            }
-            else if let _ = value["enum"] as? [String] {
-                type = DefinitionType.toDefinitionType(type: name)
-            }
-            else if let typeValue = value["type"] as? String {
-                if typeValue == "array", let items = value["items"] as? [String: Any] {
-                    if let ref = items["$ref"] as? String {
-                        let fileSplit = ref.split(separator: "/")
-                        let defName = fileSplit[fileSplit.count - 2]
-                        type = .Array(DefinitionType.toDefinitionType(type: String(defName)))
-                    }
-                    else{
-                        type = .Array(DefinitionType.toDefinitionType(type: typeValue))
-                    }
-                }
-                else {
-                    type = DefinitionType.toDefinitionType(type: typeValue)
-                }
-            }
-            else {
-                type = .String
-            }
-            description = value["description"] as? String
-            enumValues = value["enum"] as? [String]
-            const = value["const"] as? String
-        }
-    }
-}
 
 extension String {
     func toTypedCamelCase() -> String {
@@ -144,60 +260,9 @@ extension String {
     func toVariableCamelCase() -> String {
         return String(self.prefix(1)) + String(self.toTypedCamelCase().dropFirst())
     }
-}
-
-extension Definition {
-    func buildEnum(_ name: DefinitionType, values: [String]) throws -> TypeSpecBuilder{
-        let enumType = TypeSpec.newEnum(name: name.typeAsString)
-            .superClass(superClass: "String", "Encodable", "Equatable")
-            .modifier(modifiers: .PUBLIC)
-        values.forEach { value in
-            let enumConstantSpec = EnumConstantSpec.newEnumValue(name: value.toVariableCamelCase()).value(value: "\"\(value)\"")
-            _ = enumType.addEnumConstant(enumConstant: enumConstantSpec.build())
-            
-        }
-        return enumType
-    }
     
-    func build() throws -> SwiftFileBuilder {
-        let structSpecBuilder = TypeSpec.newStruct(name: name.typeAsString)
-        let initSpec = MethodSpec.initBuilder()
-            .modifiers(.PUBLIC)
-        
-        try properties.forEach { p in
-            let isRequired: Bool = required?.contains(p.name) ?? false
-            let type: String = p.type.typeAsString
-            
-            let field = FieldSpecBuilder(name: p.name, fieldType: "\(type)\(isRequired ? "": "?")")
-                .addModifier(fieldModifiers: .PUBLIC)
-            if let enums = p.enumValues {
-                _ = try structSpecBuilder.addInnerType(typeSpec: buildEnum(p.type, values: enums).build())
-            }
-            if let const = p.const {
-                switch p.type {
-                case .Int, .Double:
-                    _ = field.initWith(initializer: const)
-                default:
-                    _ = field.initWith(initializer: "\"\(const)\"")
-                }
-            }
-            else {
-                if isRequired {
-                    _ = initSpec.addParam(ParameterSpec.init(p.name, paramType: "\(type)\(isRequired ? "": "?")"))
-                }
-                else {
-                    _ = initSpec.addParam(ParameterSpec.init(p.name, paramType: "\(type)\(isRequired ? "": "?")", defaultValue: "nil"))
-                }
-            }
-            _ = structSpecBuilder.addProperty(propertySpec: field.build())
-        }
-        
-        let structSpec = try structSpecBuilder.addMethod(methodSpec: initSpec.build())
-            .modifier(modifiers: .PUBLIC)
-            .build()
-        
-        return SwiftFile
-            .newFile(name: name.typeAsString)
-            .addType(structSpec)
+    func refStringToTypeString() -> String {
+        let fileSplit = self.split(separator: "/")
+        return String(fileSplit[fileSplit.count - 2])
     }
 }
