@@ -33,6 +33,7 @@ public class TypeSpec : SwiftComponentWriter {
     let enumCases : [EnumConstantSpec]
     let typeGeneric: String?
     let whereClause: String?
+    let comments : [String]
     
     public static func newClass(name: String) -> TypeSpecBuilder {
         return TypeSpecBuilder(type: TypeKind.CLASS, name: name)
@@ -55,7 +56,7 @@ public class TypeSpec : SwiftComponentWriter {
     }
     
     init(type: TypeKind, name: String, superType: [String], modifiers: [TypeModifier], methodList: [MethodSpec] = [], propertyList: [VariableSpec] = [],
-         innerTypeList: [TypeSpec] = [], enumCases: [EnumConstantSpec], genericClause: String? = nil, whereClause: String? = nil) {
+         innerTypeList: [TypeSpec] = [], enumCases: [EnumConstantSpec], genericClause: String? = nil, whereClause: String? = nil, comments: [String] = []) {
         self.name = name
         self.superType = superType
         self.methodList = methodList
@@ -66,9 +67,13 @@ public class TypeSpec : SwiftComponentWriter {
         self.enumCases = enumCases
         self.typeGeneric = genericClause
         self.whereClause = whereClause
+        self.comments = comments
     }
     
     func emit(codeWriter: CodeWriter) {
+        comments.forEach { comment in 
+            _ = codeWriter.emit(code: "/// \(comment)\n")
+        }
         _ = codeWriter
             .emitModifiers(modifiers)
             .emit(code: type.rawValue)
@@ -131,6 +136,7 @@ public class TypeSpecBuilder {
     var enumCases = [EnumConstantSpec]()
     var genericClause : String? = nil
     var whereClause: String? = nil
+    var comments = [String]()
     
     init(type: TypeKind, name: String) {
         self.type = type
@@ -172,11 +178,17 @@ public class TypeSpecBuilder {
         return self
     }
     
+    public func comment(comments: String...) -> TypeSpecBuilder {
+        self.comments.append(contentsOf: comments)
+        return self
+    }
+    
     public func build() throws -> TypeSpec {
         try checkMethodOfType()
         try checkEnumCases()
         return TypeSpec(type: type, name: name, superType: superClasses, modifiers: typeModifiers, methodList: typeMethod,
-                        propertyList: typeProperties, innerTypeList: innerTypeList, enumCases: enumCases, genericClause: genericClause, whereClause: whereClause)
+                        propertyList: typeProperties, innerTypeList: innerTypeList, enumCases: enumCases, genericClause: genericClause,
+                        whereClause: whereClause, comments: comments)
     }
     
     private func checkEnumCases() throws {

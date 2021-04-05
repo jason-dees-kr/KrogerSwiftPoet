@@ -16,20 +16,25 @@ public class VariableSpec : SwiftComponentWriter {
     let modifiers:[FieldModifier]
     var canBeModified: Bool
     let initCodeBlock : [String: CodeBlock?]?
+    let comments: [String]
     
     init(name:String, fieldType:String? = nil, initializer:CodeBlock? = nil, modifiers:[FieldModifier] = [], canBeModified:Bool = false,
-         initBlock: [String: CodeBlock?]? = nil) {
+         initBlock: [String: CodeBlock?]? = nil, comments: [String] = []) {
         self.name = name
         self.fieldType = fieldType
         self.initializer = initializer
         self.modifiers = modifiers
         self.canBeModified = canBeModified
         self.initCodeBlock = initBlock
+        self.comments = comments
     }
     
     func emit(codeWriter: CodeWriter) {
         let codeWriter = codeWriter
-            .emitModifiers(modifiers)
+        comments.forEach { comment in
+            _ = codeWriter.emit(code: "/// \(comment)\n")
+        }
+        _ = codeWriter.emitModifiers(modifiers)
             .emit(code: canBeModified ? "var " : "let ")
             .emit(code: name)
             .emit(code: fieldType?.prepend(string: ": ") ?? "")
@@ -61,6 +66,7 @@ public class FieldSpecBuilder {
     var modifiers = [FieldModifier]()
     var canBeModified = false
     var initCodeBlock = [String: CodeBlock?]()
+    var comments = [String]()
     
     public init(name:String, fieldType: String? = nil) {
         self.name = name
@@ -107,8 +113,13 @@ public class FieldSpecBuilder {
         return self
     }
     
+    public func comment(comments: String...) -> FieldSpecBuilder {
+        self.comments.append(contentsOf: comments)
+        return self
+    }
+    
     public func build() -> VariableSpec {
-        return VariableSpec(name: name, fieldType: fieldType, initializer: initializer,modifiers: modifiers, canBeModified: canBeModified, initBlock: initCodeBlock)
+        return VariableSpec(name: name, fieldType: fieldType, initializer: initializer,modifiers: modifiers, canBeModified: canBeModified, initBlock: initCodeBlock, comments: comments)
     }
     
 }

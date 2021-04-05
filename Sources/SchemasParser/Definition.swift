@@ -15,10 +15,12 @@ public struct DefinitionsBuilder {
         let propDict = cast["properties"] as! [String : Any]
         let required = cast["required"] as? [String]
         let allOf = cast["allOf"] as? [Any]
+        let id = cast["$id"] as! String
         
         let properties : [Definition.Property] = propDict.map { (key, value) in .init(key: key, value: value as! [String : Any], required: required?.contains(key) ?? false)}
         
         let definition = Definition(name: .Object(name),
+                                    version: String(id.split(separator: "/").last ?? "unknown"),
                                     properties: properties,
                                     required: required,
                                     allOf: allOf,
@@ -57,6 +59,7 @@ public struct DefinitionsBuilder {
 
 public struct Definition {
     let name: DefinitionType
+    let version: String
     var properties: [Property]
     let required: [String]?
     let allOf: [Any]?
@@ -144,6 +147,7 @@ extension Definition {
         let inheritedProperties = inheritedObjects.flatMap { $0.properties }
         let inheritedAllOf = inheritedObjects.compactMap { $0.allOf }
         return Definition(name: name,
+                          version: version,
                           properties: inheritedProperties + properties,
                           required: required,
                           allOf: allOf ?? [] + inheritedAllOf,
@@ -168,6 +172,12 @@ extension Definition {
     func toSwiftFileBuilder() throws -> SwiftFileBuilder {
         let structSpecBuilder = TypeSpec.newStruct(name: name.typeAsString)
             .superClass(superClass: "Validatable")
+            .comment(comments: "Version: \(version)")
+        
+        if let description = description {
+            _ = structSpecBuilder.comment(comments: description)
+        }
+        
         let initSpec = MethodSpec.initBuilder()
             .modifiers(.PUBLIC)
         
@@ -176,6 +186,9 @@ extension Definition {
             
             let field = FieldSpecBuilder(name: p.name, fieldType: "\(type)\(p.required ? "": "?")")
                 .addModifier(fieldModifiers: .PUBLIC)
+            if let description = p.description {
+                _ = field.comment(comments: description)
+            }
             if let enums = p.enumValues {
                 _ = try structSpecBuilder.addInnerType(typeSpec: buildEnum(p.type, values: enums).build())
             }
