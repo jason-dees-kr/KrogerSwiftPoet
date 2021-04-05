@@ -141,7 +141,13 @@ extension Definition {
     
     func getRefs(definitions: [String: Definition]) -> [Definition] {
         var refDefinitions: [Definition] = []
-        //Recursively cycle through each inherited object to build out inheritance object list
+        // Recursively cycle through each inherited object to build out inheritance object list
+        
+        // This is also wrong since it doens't take into account the VERSION of the reference vs the version of the manifest.
+        // Ideally they are both the same version, but I guess we could conceivably have a SubmitOrderProduct referencing Product 1.0.2
+        // and a ProductViewProduct referencing 1.0.5
+        // Not sure how else to do it, maybe only do a manifest for Scenarios + MetaData and determine Definitions to load from there
+        // Operating under the assumption that we will never have version conflicts like that
         refs.compactMap { definitions[$0] }.forEach { def in
             refDefinitions.append(def)
             refDefinitions.append(contentsOf: def.getRefs(definitions: definitions))
