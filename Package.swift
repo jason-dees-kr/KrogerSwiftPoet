@@ -17,6 +17,7 @@ let package = Package(
     dependencies: [
         //.package(name: "JSONSchema", url: "https://github.com/kylef/JSONSchema.swift", .branch("master")),
         //.package(name: "JSONSchema", url: "https://github.com/kylef/JSONSchema.swift", .exact("0.5.0")),
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "0.4.0"),
     ],
     targets: [
         .target(
@@ -28,6 +29,6 @@ let package = Package(
             resources: [.process("test_resources")]),
         .target(
             name: "SchemasParser",
-            dependencies: ["KrogerSwiftPoet"]),
+            dependencies: ["KrogerSwiftPoet", .product(name: "ArgumentParser", package: "swift-argument-parser")]),
     ]
 )

@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  ManifestLoader.swift
 //  
 //
 //  Created by Jason Dees on 4/2/21.
@@ -58,9 +58,9 @@ public struct ManifestReader {
     
     let schemaDefinitions: [String: Any]
     
-    init(settings: SchemaSettings = .init()) throws {
+    init(settings: SchemaSettings) throws {
         self.settings = settings
         loader = try .init(manifestFilePath: settings.manifestFile)
-        schemaDefinitions = try loader.manifest.load(basePath: settings.parentDirectory)
+        schemaDefinitions = try loader.manifest.load(basePath: settings.schemaDirectory)
     }
 }

@@ -1,32 +1,13 @@
 //
-//  File.swift
+//  Definition.swift
 //  
 //
-//  Created by Jason Dees on 4/2/21.
+//  Created by Jason Dees on 4/5/21.
 //
 
 import Foundation
 import KrogerSwiftPoet
 
-public final class SchemaParser {
-    
-    private let arguments: [String]
-    
-    public init(arguments: [String] = CommandLine.arguments) {
-        self.arguments = arguments
-    }
-    
-    public func run() throws {
-        let settings = SchemaSettings()
-        
-        let definitionBuilder = DefinitionsBuilder()
-        let definitions = try definitionBuilder.buildDefinitionsDictionary(definitions: try ManifestReader(settings: settings).schemaDefinitions)
-        
-        try definitions.forEach {name, definition in
-            _ = try definition.toSwiftFileBuilder().build().writeTo(settings.outputDirectory)
-        }
-    }
-}
 
 public struct DefinitionsBuilder {
     
@@ -106,8 +87,11 @@ public struct Definition {
                     if let ref = items["$ref"] as? String {
                         type = .Array(DefinitionType.toDefinitionType(type: String(ref.refStringToTypeString())))
                     }
-                    else{
-                        type = .Array(DefinitionType.toDefinitionType(type: typeValue))
+                    else if let itemsType = items["type"] as? String {
+                        type = .Array(DefinitionType.toDefinitionType(type: itemsType))
+                    }
+                    else {
+                        type = .Array(.String)
                     }
                 }
                 else {
