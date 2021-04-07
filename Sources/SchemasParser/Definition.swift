@@ -41,6 +41,7 @@ public struct DefinitionsBuilder {
         // grabbing the inherited refs and building out an heritance list. This
         // then constructs a new Defintion object based on the current defintion
         // and inherited defition
+        // Could I do some preprocessing on the schemas?
         return Dictionary(uniqueKeysWithValues: defintionsDictionary.map { (key, value) in
             if value.hasAllOfRef {
                 return (key, value.addInheritedObjects(definitions: defintionsDictionary))
@@ -67,26 +68,32 @@ public struct Definition {
     
     public struct Property {
         let name: String
-        let description: String?
         let type: DefinitionType
-        let enumValues: [String]?
-        let const: String?
         let required: Bool
         
-        //        let pattern: String? = nil
-        //        let minItems: Int? = nil
-        //        let maxItems: Int? = nil
+        let dictionary: [String: Any]
+        
+        var description: String? {
+            dictionary["description"] as? String
+        }
+        var enumValues: [String]? {
+            dictionary["enum"] as? [String]
+        }
+        var  const: String? {
+            dictionary["const"] as? String
+        }
         
         init(key: String, value:[String: Any], required: Bool) {
             name = key
-            if let ref = value["$ref"] as? String {
+            dictionary = value
+            if let ref = dictionary["$ref"] as? String {
                 type = DefinitionType.toDefinitionType(type: String(ref.refStringToTypeString()))
             }
-            else if let _ = value["enum"] as? [String] {
+            else if let _ = dictionary["enum"] as? [String] {
                 type = DefinitionType.toDefinitionType(type: name)
             }
-            else if let typeValue = value["type"] as? String {
-                if typeValue == "array", let items = value["items"] as? [String: Any] {
+            else if let typeValue = dictionary["type"] as? String {
+                if typeValue == "array", let items = dictionary["items"] as? [String: Any] {
                     if let ref = items["$ref"] as? String {
                         type = .Array(DefinitionType.toDefinitionType(type: String(ref.refStringToTypeString())))
                     }
@@ -94,6 +101,7 @@ public struct Definition {
                         type = .Array(DefinitionType.toDefinitionType(type: itemsType))
                     }
                     else {
+                        //Catch all for this
                         type = .Array(.String)
                     }
                 }
@@ -104,9 +112,6 @@ public struct Definition {
             else {
                 type = .String
             }
-            description = value["description"] as? String
-            enumValues = value["enum"] as? [String]
-            const = value["const"] as? String
             self.required = required
         }
     }

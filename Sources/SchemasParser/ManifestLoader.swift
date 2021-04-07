@@ -35,7 +35,7 @@ extension Manifest.Schema {
         let fullPath = "\(basePath)/\(path)/\(name)/\(version)/\(name).json"
         let url = URL(string: fullPath)
         let schemaData = try Data(contentsOf: url!)
-        
+        //Do recursive ref loading here?
         return try JSONSerialization.jsonObject(with: schemaData) as! [String: Any]
     }
 }
@@ -61,6 +61,12 @@ public struct ManifestReader {
     init(settings: SchemaSettings) throws {
         self.settings = settings
         loader = try .init(manifestFilePath: settings.manifestFile)
+        //Filter out definitions that aren't scenarios? Let the Scenario $refs determine what should be loaded
+        //For inherited schemas, i don't want to parse them from the allOf array, but I guess I could?
         schemaDefinitions = try loader.manifest.load(basePath: settings.schemaDirectory)
     }
 }
+
+//Other loading strategies:
+// 1. Have base Schemas (scenarios, metadata in this instance) that reference ($ref) child scenarios (definitions)
+// 2. 
